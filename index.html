@@ -27,8 +27,9 @@
         .journal-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid var(--primary); }
         .action-btns { display: flex; gap: 10px; margin-top: 10px; }
         .action-btns button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #EEE; font-size: 12px; }
-        .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .acc-edit-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; background: white; padding: 10px; border-radius: 10px; }
+        .direction-toggle { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 10px 0; font-size: 20px; font-weight: bold; color: var(--primary); cursor: pointer; }
+        .logic-hint { font-size: 11px; color: #8E8E93; text-align: center; margin-bottom: 10px; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -56,12 +57,21 @@
     <h2 id="entry-title">Ny Postering</h2>
     <input type="hidden" id="edit-id">
     <input type="date" id="entry-date">
-    <label>Konto</label>
-    <select id="entry-account"></select>
-    <label>Modkonto (Kun Balance)</label>
-    <select id="entry-offset"></select>
+    <label>Fra / Konto</label>
+    <select id="entry-account" onchange="updateLogicHint()"></select>
+    
+    <div class="direction-toggle" onclick="toggleDirection()">
+        <span id="dir-arrow">➔</span>
+    </div>
+
+    <label>Til / Modkonto</label>
+    <select id="entry-offset" onchange="updateLogicHint()"></select>
+    
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
-    <input type="number" step="0.01" id="entry-amount" placeholder="Beløb" style="text-align: right; font-size: 28px; font-weight: bold;">
+    <input type="number" step="0.01" id="entry-amount" placeholder="Beløb" style="text-align: right; font-size: 28px; font-weight: bold;" oninput="updateLogicHint()">
+    
+    <div id="logic-hint" class="logic-hint">Vælg konti og beløb for at se konsekvens.</div>
+    
     <button class="primary" onclick="saveEntry()">BOGFØR</button>
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
@@ -113,14 +123,21 @@
 <script>
     const FMT = (n) => n.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const TYPE_ORDER = { "Indtægt": 1, "Udgift": 2, "Aktiv": 3, "Passiv": 4 };
+    let currentDir = 1; // 1 = Normal, -1 = Vendt
 
-    let accounts = JSON.parse(localStorage.getItem('h_acc_v7')) || [
+    let accounts = JSON.parse(localStorage.getItem('h_acc_v8')) || [
         {id: 1, name: "Lejeindtægt", type: "Indtægt"},
         {id: 2, name: "Vedligehold", type: "Udgift"},
         {id: 3, name: "Bank", type: "Aktiv"},
         {id: 4, name: "Lån", type: "Passiv"}
     ];
-    let journal = JSON.parse(localStorage.getItem('h_jou_v7')) || [];
+    let journal = JSON.parse(localStorage.getItem('h_jou_v8')) || [];
+
+    function toggleDirection() {
+        currentDir *= -1;
+        document.getElementById('dir-arrow').innerText = currentDir === 1 ? "➔" : "⬅";
+        updateLogicHint();
+    }
 
     function getSortedAccounts() {
         return [...accounts].sort((a, b) => {
@@ -141,15 +158,11 @@
     }
 
     function renderEntry(editId = null) {
-        document.getElementById('entry-title').innerText = editId ? "Rediger Postering" : "Ny Postering";
-        
+        currentDir = 1;
+        document.getElementById('dir-arrow').innerText = "➔";
         const sorted = getSortedAccounts();
         const balanceOnly = sorted.filter(a => a.type === 'Aktiv' || a.type === 'Passiv');
-
-        // Kun navn i kassekladde (ingen ID/Type)
         document.getElementById('entry-account').innerHTML = sorted.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-        
-        // Kun Aktiv og Passiv i modkonto
         document.getElementById('entry-offset').innerHTML = balanceOnly.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
         
         if(editId) {
@@ -159,15 +172,36 @@
                 document.getElementById('entry-account').value = j.accId;
                 document.getElementById('entry-offset').value = j.offId;
                 document.getElementById('entry-desc').value = j.desc;
-                document.getElementById('entry-amount').value = j.amount;
-                return;
+                document.getElementById('entry-amount').value = Math.abs(j.amount);
+                currentDir = j.amount < 0 ? -1 : 1;
+                document.getElementById('dir-arrow').innerText = currentDir === 1 ? "➔" : "⬅";
             }
+        } else {
+            document.getElementById('edit-id').value = "";
+            document.getElementById('entry-date').valueAsDate = new Date();
+            document.getElementById('entry-offset').value = 3;
+            document.getElementById('entry-desc').value = "";
+            document.getElementById('entry-amount').value = "";
         }
-        document.getElementById('edit-id').value = "";
-        document.getElementById('entry-date').valueAsDate = new Date();
-        document.getElementById('entry-offset').value = 3; // Standard: Bank
-        document.getElementById('entry-desc').value = "";
-        document.getElementById('entry-amount').value = "";
+        updateLogicHint();
+    }
+
+    function updateLogicHint() {
+        const amt = parseFloat(document.getElementById('entry-amount').value) || 0;
+        const acc = accounts.find(a => a.id == document.getElementById('entry-account').value);
+        const off = accounts.find(a => a.id == document.getElementById('entry-offset').value);
+        if (!acc || !off || amt === 0) return;
+
+        let hint = "";
+        const primaryFlow = currentDir === 1 ? "øger" : "mindsker";
+        const secondaryFlow = currentDir === 1 ? "mindsker" : "øger";
+
+        if (acc.type === "Indtægt") hint = `Indtægt ${FMT(amt)} kr. der ${primaryFlow} din ${off.name}.`;
+        else if (acc.type === "Udgift") hint = `Udgift ${FMT(amt)} kr. der ${currentDir === 1 ? "mindsker" : "øger"} din ${off.name}.`;
+        else if (acc.type === "Aktiv" && off.type === "Aktiv") hint = `Flytter ${FMT(amt)} kr. fra ${currentDir === 1 ? acc.name : off.name} til ${currentDir === 1 ? off.name : acc.name}.`;
+        else if (acc.type === "Passiv" && off.type === "Passiv") hint = `Flytter gæld/post på ${FMT(amt)} kr. mellem ${acc.name} og ${off.name}.`;
+        
+        document.getElementById('logic-hint').innerText = hint;
     }
 
     function saveEntry() {
@@ -175,19 +209,32 @@
         const accId = parseInt(document.getElementById('entry-account').value);
         const offId = parseInt(document.getElementById('entry-offset').value);
         const editId = document.getElementById('edit-id').value;
-        if(!amt || accId === offId) return alert("Ugyldig indtastning");
+        if(!amt || accId === offId) return alert("Fejl i indtastning");
 
         if(editId) journal = journal.filter(j => j.groupId !== editId);
         const groupId = editId || Date.now().toString();
         const acc = accounts.find(a => a.id === accId);
-        const factor = (acc.type === 'Udgift') ? -1 : 1;
+        
+        // Automatisk logik: Udgifter trækker fra som standard
+        let factor = (acc.type === 'Udgift') ? -1 : 1;
+        factor *= currentDir; // Påvirkning fra pilen
 
-        journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: amt, desc: document.getElementById('entry-desc').value, isPrimary: true });
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: amt * currentDir, desc: document.getElementById('entry-desc').value, isPrimary: true });
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId: offId, amount: amt * factor, desc: "Modpost: " + document.getElementById('entry-desc').value, isPrimary: false });
 
-        localStorage.setItem('h_jou_v7', JSON.stringify(journal));
+        localStorage.setItem('h_jou_v8', JSON.stringify(journal));
         document.getElementById('edit-id').value = "";
         showView('home');
+    }
+
+    function reversePost(gid) {
+        const original = journal.filter(j => j.groupId === gid);
+        const newGid = "rev_" + Date.now();
+        original.forEach(o => {
+            journal.push({...o, groupId: newGid, amount: o.amount * -1, desc: "TILBAGEFØRSEL: " + o.desc, date: new Date().toISOString().split('T')[0]});
+        });
+        localStorage.setItem('h_jou_v8', JSON.stringify(journal));
+        renderJournal();
     }
 
     function populateFilters() {
@@ -215,16 +262,17 @@
                     <span class="amount">${FMT(j.amount)} kr.</span>
                 </div>
                 <div class="action-btns">
-                    <button onclick="document.getElementById('edit-id').value='${j.groupId}'; showView('entry');">Rediger</button>
+                    <button onclick="document.getElementById('edit-id').value='${j.groupId}'; showView('entry');">Ret</button>
+                    <button onclick="reversePost('${j.groupId}')">Tilbagefør</button>
                     <button style="color:var(--danger)" onclick="deletePost('${j.groupId}')">Slet</button>
                 </div>
             </div>`).join('');
     }
 
     function deletePost(gid) {
-        if(confirm("Slet postering?")) {
+        if(confirm("Slet postering permanent?")) {
             journal = journal.filter(g => g.groupId !== gid);
-            localStorage.setItem('h_jou_v7', JSON.stringify(journal));
+            localStorage.setItem('h_jou_v8', JSON.stringify(journal));
             renderJournal();
         }
     }
@@ -240,10 +288,10 @@
         html += `<table><tr class="header-row"><td>UDGIFTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Udgift').forEach(a => {
             const b = journal.filter(j => j.accId === a.id && j.isPrimary).reduce((s,j)=>s+j.amount,0);
-            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
+            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(Math.abs(b))}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${FMT(uT)}</td></tr></table>`;
-        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${FMT(iT - uT)} kr.</div></div>`;
+        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${FMT(Math.abs(uT))}</td></tr></table>`;
+        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${FMT(iT + uT)} kr.</div></div>`;
         document.getElementById('res-content').innerHTML = html;
     }
 
@@ -261,7 +309,7 @@
             pT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
         });
         const egenkapital = aT - pT;
-        html += `<tr><td>Egenkapital</td><td class="amount">${FMT(egenkapital)}</td></tr>`;
+        html += `<tr><td>Egenkapital (Beregnet)</td><td class="amount">${FMT(egenkapital)}</td></tr>`;
         html += `<tr class="total-row"><td>TOTAL PASSIVER</td><td class="amount">${FMT(pT + egenkapital)}</td></tr></table>`;
         document.getElementById('bal-content').innerHTML = html;
     }
@@ -269,10 +317,9 @@
     function updateDash() {
         const bank = journal.filter(j => j.accId === 3).reduce((s,j)=>s+j.amount,0);
         document.getElementById('dash-bank').innerText = FMT(bank) + " kr.";
-        const currentYear = new Date().getFullYear().toString();
-        const i = journal.filter(j => j.isPrimary && j.date.startsWith(currentYear) && accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
-        const u = journal.filter(j => j.isPrimary && j.date.startsWith(currentYear) && accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
-        document.getElementById('dash-ytd').innerText = FMT(i - u) + " kr.";
+        const i = journal.filter(j => j.isPrimary && accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
+        const u = journal.filter(j => j.isPrimary && accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
+        document.getElementById('dash-ytd').innerText = FMT(i + u) + " kr.";
     }
 
     function renderAccounts() {
@@ -287,10 +334,10 @@
 
     function updateAccName(id, newName) {
         const acc = accounts.find(a => a.id === id);
-        if(acc) { acc.name = newName; localStorage.setItem('h_acc_v7', JSON.stringify(accounts)); }
+        if(acc) { acc.name = newName; localStorage.setItem('h_acc_v8', JSON.stringify(accounts)); }
     }
 
-    function delAcc(id) { accounts = accounts.filter(x=>x.id!==id); localStorage.setItem('h_acc_v7', JSON.stringify(accounts)); renderAccounts(); }
+    function delAcc(id) { accounts = accounts.filter(x=>x.id!==id); localStorage.setItem('h_acc_v8', JSON.stringify(accounts)); renderAccounts(); }
     
     function addAccount() {
         const n = document.getElementById('new-acc-name').value;
@@ -298,7 +345,7 @@
         if(n) {
             const lastId = accounts.length > 0 ? Math.max(...accounts.map(a => a.id)) : 0;
             accounts.push({id: lastId + 1, name: n, type: t});
-            localStorage.setItem('h_acc_v7', JSON.stringify(accounts));
+            localStorage.setItem('h_acc_v8', JSON.stringify(accounts));
             renderAccounts();
             document.getElementById('new-acc-name').value = "";
         }
@@ -326,20 +373,19 @@
                 const date = cols[0], accId = parseInt(cols[1]), offId = parseInt(cols[2]), desc = cols[3], amt = parseFloat(cols[4]);
                 if(!date || isNaN(accId)) continue;
                 const gid = "imp_" + Date.now() + "_" + i;
-                const factor = (accounts.find(a => a.id === accId)?.type === 'Udgift') ? -1 : 1;
                 newEntries.push({ groupId: gid, date, accId, offId, amount: amt, desc, isPrimary: true });
-                newEntries.push({ groupId: gid, date, accId: offId, amount: amt * factor, desc: "Modpost: " + desc, isPrimary: false });
+                newEntries.push({ groupId: gid, date, accId: offId, amount: amt * -1, desc: "Modpost: " + desc, isPrimary: false });
             }
             if(confirm("Importer " + (newEntries.length/2) + " posteringer?")) {
                 journal = journal.concat(newEntries);
-                localStorage.setItem('h_jou_v7', JSON.stringify(journal));
+                localStorage.setItem('h_jou_v8', JSON.stringify(journal));
                 showView('home');
             }
         };
         reader.readAsText(file);
     }
 
-    function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
+    function clearAll() { if(confirm("Slet alt? Dette kan ikke fortrydes!")) { localStorage.clear(); location.reload(); } }
     showView('home');
 </script>
 </body>
