@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Udlejning Pro v3</title>
+    <title>Udlejning Pro v4</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <style>
@@ -17,12 +17,11 @@
         .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
         .menu-btn { background: var(--card); border: none; padding: 20px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #DDD; font-size: 16px; box-sizing: border-box; }
-        .num-pad { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .num-btn { background: white; border: 1px solid #DDD; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; background: white; border-radius: 15px; margin-bottom: 20px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 15px; margin-bottom: 20px; overflow: hidden; table-layout: fixed; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #EEE; }
         .header-row { background: #f8f8f8; font-weight: bold; color: var(--primary); }
-        .total-row { font-weight: bold; border-top: 2px solid #EEE; }
+        .total-row { font-weight: bold; background: #fafafa; border-top: 2px solid #EEE; }
+        .amount { text-align: right; width: 100px; font-variant-numeric: tabular-nums; }
         button.primary { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; }
         .journal-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid var(--primary); }
     </style>
@@ -32,7 +31,7 @@
 <div id="view-home" class="view active">
     <h1>Dashboard</h1>
     <div class="stat-card">
-        <div class="stat-label">Resultat (YTD)</div>
+        <div class="stat-label">Årets Resultat (Netto)</div>
         <div id="dash-ytd" class="stat-value">0 kr.</div>
     </div>
     <div class="stat-card">
@@ -52,13 +51,12 @@
     <h2 id="entry-title">Ny Postering</h2>
     <input type="hidden" id="edit-id">
     <input type="date" id="entry-date">
-    <label style="font-size:12px; color:gray;">Konto</label>
+    <label>Konto (Indtægt/Udgift)</label>
     <select id="entry-account"></select>
-    <label style="font-size:12px; color:gray;">Modkonto</label>
+    <label>Modkonto (Standard: Bank)</label>
     <select id="entry-offset"></select>
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
-    <input type="number" id="entry-amount" placeholder="0" style="text-align: right; font-size: 28px; font-weight: bold;">
-    <div class="num-pad" id="numpad"></div>
+    <input type="number" id="entry-amount" placeholder="Beløb" style="text-align: right; font-size: 28px; font-weight: bold;">
     <button class="primary" onclick="saveEntry()">BOGFØR</button>
     <button onclick="showView('home')" style="width:100%; background:none; border:none; color:gray; margin-top:15px;">Annuller</button>
 </div>
@@ -94,20 +92,18 @@
         <button class="primary" onclick="addAccount()">Opret konto</button>
     </div>
     <div id="acc-list"></div>
-    <hr>
     <button class="primary" style="background:var(--success)" onclick="exportCSV()">EKSPORTER CSV</button>
     <button class="primary" style="background:var(--danger)" onclick="clearAll()">SLET ALT DATA</button>
-    <button onclick="showView('home')" style="width:100%; border:none; background:none; margin-top:10px;">Tilbage</button>
 </div>
 
 <script>
-    let accounts = JSON.parse(localStorage.getItem('h_acc_v3')) || [
+    let accounts = JSON.parse(localStorage.getItem('h_acc_v4')) || [
         {id: 1, name: "Lejeindtægt", type: "Indtægt"},
         {id: 2, name: "Vedligehold", type: "Udgift"},
         {id: 3, name: "Bank", type: "Aktiv"},
-        {id: 4, name: "Egenkapital", type: "Passiv"}
+        {id: 4, name: "Lån", type: "Passiv"}
     ];
-    let journal = JSON.parse(localStorage.getItem('h_jou_v3')) || [];
+    let journal = JSON.parse(localStorage.getItem('h_jou_v4')) || [];
 
     function showView(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -121,160 +117,117 @@
     }
 
     function renderEntry(editId = null) {
-        document.getElementById('entry-title').innerText = editId ? "Rediger Postering" : "Ny Postering";
-        document.getElementById('edit-id').value = editId || "";
         document.getElementById('entry-date').valueAsDate = new Date();
         const opts = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
         document.getElementById('entry-account').innerHTML = opts;
         document.getElementById('entry-offset').innerHTML = opts;
-        document.getElementById('entry-offset').value = 3; // Bank er default
-        
-        if(editId) {
-            const entry = journal.find(j => j.groupId === editId && j.isPrimary);
-            document.getElementById('entry-date').value = entry.date;
-            document.getElementById('entry-account').value = entry.accId;
-            document.getElementById('entry-offset').value = entry.offId;
-            document.getElementById('entry-desc').value = entry.desc;
-            document.getElementById('entry-amount').value = entry.amount;
-        } else {
-            document.getElementById('entry-desc').value = "";
-            document.getElementById('entry-amount').value = "";
-        }
+        document.getElementById('entry-offset').value = 3;
+        document.getElementById('edit-id').value = editId || "";
+        if(!editId) { document.getElementById('entry-desc').value = ""; document.getElementById('entry-amount').value = ""; }
     }
 
     function saveEntry() {
         const amt = parseFloat(document.getElementById('entry-amount').value);
         const accId = parseInt(document.getElementById('entry-account').value);
         const offId = parseInt(document.getElementById('entry-offset').value);
-        const date = document.getElementById('entry-date').value;
-        const desc = document.getElementById('entry-desc').value;
         const editId = document.getElementById('edit-id').value;
+        if(!amt || accId === offId) return alert("Fejl");
 
-        if(!amt || accId === offId) return alert("Ugyldig postering");
-
-        if(editId) { // Slet gamle linjer hvis vi redigerer
-            journal = journal.filter(j => j.groupId !== editId);
-        }
-
+        if(editId) journal = journal.filter(j => j.groupId !== editId);
         const groupId = editId || Date.now().toString();
-        
-        // Dobbelt bogføring
-        journal.push({ groupId, date, accId, amount: amt, desc, isPrimary: true, offId });
-        journal.push({ groupId, date, accId: offId, amount: amt, desc: "Modpost: " + desc, isPrimary: false });
+        const acc = accounts.find(a => a.id === accId);
 
-        localStorage.setItem('h_jou_v3', JSON.stringify(journal));
+        // LOGIK: Hvis kontoen er en udgift, skal modposten i banken være negativ
+        const factor = (acc.type === 'Udgift') ? -1 : 1;
+
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId, amount: amt, desc: document.getElementById('entry-desc').value, isPrimary: true, offId });
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId: offId, amount: amt * factor, desc: "Modpost: " + document.getElementById('entry-desc').value, isPrimary: false });
+
+        localStorage.setItem('h_jou_v4', JSON.stringify(journal));
         showView('home');
     }
 
-    function renderJournal() {
-        const list = document.getElementById('journal-list');
-        const primaries = journal.filter(j => j.isPrimary).sort((a,b) => new Date(b.date) - new Date(a.date));
-        list.innerHTML = primaries.map(j => `
-            <div class="journal-item">
-                <div style="font-size:12px; color:gray">${j.date}</div>
-                <div style="font-weight:bold">${j.desc}</div>
-                <div style="display:flex; justify-content:space-between; margin-top:5px;">
-                    <span>${accounts.find(a=>a.id==j.accId).name}</span>
-                    <span style="color:var(--primary)">${j.amount.toLocaleString()} kr.</span>
-                </div>
-                <div style="margin-top:10px; display:flex; gap:10px;">
-                    <button onclick="renderEntry('${j.groupId}'); showView('entry');" style="flex:1; padding:5px; border-radius:5px; border:1px solid #ddd;">Rediger</button>
-                    <button onclick="deleteGroup('${j.groupId}')" style="flex:1; padding:5px; border-radius:5px; border:1px solid var(--danger); color:var(--danger)">Slet</button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    function deleteGroup(gid) {
-        if(confirm("Slet denne postering?")) {
-            journal = journal.filter(j => j.groupId !== gid);
-            localStorage.setItem('h_jou_v3', JSON.stringify(journal));
-            renderJournal();
-        }
-    }
-
     function renderResult() {
-        const content = document.getElementById('res-content');
-        let incT = 0, expT = 0;
-        let html = `<table><tr class="header-row"><td>INDTÆGTER</td><td align="right">Kr.</td></tr>`;
+        let iT = 0, uT = 0;
+        let html = `<table><tr class="header-row"><td>INDTÆGTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Indtægt').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            incT += b; html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+            const b = journal.filter(j => j.accId === a.id && j.isPrimary).reduce((s,j)=>s+j.amount,0);
+            iT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>Total Indtægter</td><td align="right">${incT.toLocaleString()}</td></tr></table>`;
-
-        html += `<table><tr class="header-row"><td>UDGIFTER</td><td align="right">Kr.</td></tr>`;
+        html += `<tr class="total-row"><td>Total Indtægter</td><td class="amount">${iT.toLocaleString()}</td></tr></table>`;
+        
+        html += `<table><tr class="header-row"><td>UDGIFTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Udgift').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            expT += b; html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+            const b = journal.filter(j => j.accId === a.id && j.isPrimary).reduce((s,j)=>s+j.amount,0);
+            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>Total Udgifter</td><td align="right">${expT.toLocaleString()}</td></tr></table>`;
-        content.innerHTML = html;
+        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${uT.toLocaleString()}</td></tr></table>`;
+        
+        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${(iT - uT).toLocaleString()} kr.</div></div>`;
+        document.getElementById('res-content').innerHTML = html;
     }
 
     function renderBalance() {
-        const content = document.getElementById('bal-content');
-        let html = `<table><tr class="header-row"><td>AKTIVER</td><td align="right">Kr.</td></tr>`;
+        let aT = 0, pT = 0;
+        let html = `<table><tr class="header-row"><td>AKTIVER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Aktiv').forEach(a => {
             const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+            aT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
         });
-        html += `</table><table><tr class="header-row"><td>PASSIVER</td><td align="right">Kr.</td></tr>`;
+        html += `<tr class="total-row"><td>TOTAL AKTIVER</td><td class="amount">${aT.toLocaleString()}</td></tr></table>`;
+
+        html += `<table><tr class="header-row"><td>PASSIVER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Passiv').forEach(a => {
             const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+            pT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
         });
-        html += `</table>`;
-        content.innerHTML = html;
+        // Beregn Egenkapital som balancepost
+        const res = accounts.filter(a=>a.type==='Indtægt').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0) - accounts.filter(a=>a.type==='Udgift').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0);
+        const egenkapital = aT - pT;
+        html += `<tr><td>Egenkapital (Beregnet)</td><td class="amount">${egenkapital.toLocaleString()}</td></tr>`;
+        html += `<tr class="total-row"><td>TOTAL PASSIVER</td><td class="amount">${(pT + (aT-pT)).toLocaleString()} kr.</td></tr></table>`;
+        document.getElementById('bal-content').innerHTML = html;
     }
 
     function updateDash() {
         const bank = journal.filter(j => j.accId === 3).reduce((s,j)=>s+j.amount,0);
         document.getElementById('dash-bank').innerText = bank.toLocaleString() + " kr.";
-        const inc = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
-        const exp = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
-        document.getElementById('dash-ytd').innerText = (inc - exp).toLocaleString() + " kr.";
+        const i = accounts.filter(a=>a.type==='Indtægt').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0);
+        const u = accounts.filter(a=>a.type==='Udgift').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0);
+        document.getElementById('dash-ytd').innerText = (i - u).toLocaleString() + " kr.";
+    }
+
+    function renderJournal() {
+        document.getElementById('journal-list').innerHTML = journal.filter(j => j.isPrimary).map(j => `
+            <div class="journal-item">
+                <div style="font-size:11px; color:gray">${j.date}</div>
+                <strong>${j.desc}</strong>
+                <div style="display:flex; justify-content:space-between">
+                    <span>${accounts.find(a=>a.id==j.accId).name}</span>
+                    <span>${j.amount.toLocaleString()} kr.</span>
+                </div>
+                <button onclick="journal = journal.filter(g => g.groupId !== '${j.groupId}'); localStorage.setItem('h_jou_v4', JSON.stringify(journal)); renderJournal();">Slet</button>
+            </div>`).join('');
     }
 
     function renderAccounts() {
-        document.getElementById('acc-list').innerHTML = accounts.map(a => {
-            const hasData = journal.some(j => j.accId === a.id);
-            return `<div class="stat-card" style="display:flex; justify-content:space-between; align-items:center;">
-                <span>${a.name} (${a.type})</span>
-                ${hasData ? '<span>🔒</span>' : `<button onclick="delAcc(${a.id})" style="color:red; border:none; background:none;">Slet</button>`}
-            </div>`;
-        }).join('');
+        document.getElementById('acc-list').innerHTML = accounts.map(a => `<div class="stat-card">${a.name} (${a.type}) ${journal.some(j=>j.accId===a.id) ? '🔒' : `<button onclick="accounts=accounts.filter(x=>x.id!==${a.id});localStorage.setItem('h_acc_v4',JSON.stringify(accounts));renderAccounts()">Slet</button>`}</div>`).join('');
     }
 
     function addAccount() {
-        const name = document.getElementById('new-acc-name').value;
-        const type = document.getElementById('new-acc-type').value;
-        if(name) {
-            accounts.push({ id: Date.now(), name, type });
-            localStorage.setItem('h_acc_v3', JSON.stringify(accounts));
-            renderAccounts();
-            document.getElementById('new-acc-name').value = "";
-        }
-    }
-
-    function delAcc(id) {
-        accounts = accounts.filter(a => a.id !== id);
-        localStorage.setItem('h_acc_v3', JSON.stringify(accounts));
-        renderAccounts();
+        const n = document.getElementById('new-acc-name').value;
+        const t = document.getElementById('new-acc-type').value;
+        if(n) { accounts.push({id:Date.now(), name:n, type:t}); localStorage.setItem('h_acc_v4', JSON.stringify(accounts)); renderAccounts(); }
     }
 
     function exportCSV() {
         let csv = "\uFEFFDato;Konto;Beskrivelse;Beløb\n";
-        journal.forEach(j => {
-            csv += `${j.date};${accounts.find(a=>a.id==j.accId).name};${j.desc};${j.amount}\n`;
-        });
+        journal.forEach(j => csv += `${j.date};${accounts.find(a=>a.id==j.accId).name};${j.desc};${j.amount}\n`);
         window.open(encodeURI("data:text/csv;charset=utf-8," + csv));
     }
 
-    function clearAll() { if(confirm("Slet alt data?")) { localStorage.clear(); location.reload(); } }
-
-    updateDash();
+    function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
+    showView('home');
 </script>
 </body>
 </html>
-
