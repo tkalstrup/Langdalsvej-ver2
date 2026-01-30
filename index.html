@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Langdalsvej Regnskab</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <style>
         :root { --primary: #5856D6; --success: #34C759; --danger: #FF3B30; --bg: #F2F2F7; --card: #FFFFFF; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: #1C1C1E; }
@@ -57,14 +55,14 @@
     <h2 id="entry-title">Ny Postering</h2>
     <input type="hidden" id="edit-id">
     <input type="date" id="entry-date">
-    <label>Fra / Konto (Mindskes)</label>
+    <label>Fra / Konto</label>
     <select id="entry-account" onchange="updateLogicHint()"></select>
     <br>
     <div class="direction-toggle" onclick="toggleDirection()">
         <span id="dir-arrow">➔</span>
     </div>
 
-    <label>Til / Modkonto (Øges)</label>
+    <label>Til / Modkonto</label>
     <select id="entry-offset" onchange="updateLogicHint()"></select>
     <br>
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
@@ -86,17 +84,8 @@
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
 
-<div id="view-report-res" class="view">
-    <h2>Resultatopgørelse</h2>
-    <div id="res-content"></div>
-    <button class="back-btn" onclick="showView('home')">Tilbage</button>
-</div>
-
-<div id="view-report-bal" class="view">
-    <h2>Balance</h2>
-    <div id="bal-content"></div>
-    <button class="back-btn" onclick="showView('home')">Tilbage</button>
-</div>
+<div id="view-report-res" class="view"><h2>Resultatopgørelse</h2><div id="res-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
+<div id="view-report-bal" class="view"><h2>Balance</h2><div id="bal-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
 
 <div id="view-accounts" class="view">
     <h2>Kontostyring</h2>
@@ -126,10 +115,7 @@
     let currentDir = 1; 
 
     let accounts = JSON.parse(localStorage.getItem('h_acc_v8')) || [
-        {id: 1, name: "Lejeindtægt", type: "Indtægt"},
-        {id: 2, name: "Vedligehold", type: "Udgift"},
-        {id: 3, name: "Bank", type: "Aktiv"},
-        {id: 4, name: "Lån", type: "Passiv"}
+        {id: 1, name: "Lejeindtægt", type: "Indtægt"}, {id: 2, name: "Vedligehold", type: "Udgift"}, {id: 3, name: "Bank", type: "Aktiv"}, {id: 4, name: "Lån", type: "Passiv"}
     ];
     let journal = JSON.parse(localStorage.getItem('h_jou_v8')) || [];
 
@@ -172,8 +158,6 @@
                 document.getElementById('entry-offset').value = j.offId;
                 document.getElementById('entry-desc').value = j.desc;
                 document.getElementById('entry-amount').value = Math.abs(j.amount);
-                currentDir = (j.amount < 0) ? 1 : -1;
-                document.getElementById('dir-arrow').innerText = currentDir === 1 ? "➔" : "⬅";
             }
         } else {
             document.getElementById('edit-id').value = "";
@@ -204,14 +188,25 @@
         if(editId) journal = journal.filter(j => j.groupId !== editId);
         const groupId = editId || Date.now().toString();
         const acc = accounts.find(a => a.id === accId);
+        const off = accounts.find(a => a.id === offId);
         
-        // HER ER FIXET:
-        // valA (Fra-konto) bliver negativ. valB (Til-konto) bliver positiv.
-        // strømmen vendes hvis pilen peger til venstre (currentDir = -1)
-        let valA = amt * -1 * currentDir;
-        let valB = amt * currentDir;
+        // FORBEDRET LOGIK: Skelner mellem Aktiv/Passiv overførsel
+        let valA, valB;
 
-        // Særregel for Udgift: Skal altid trække fra resultat
+        if (acc.type === 'Passiv' && off.type === 'Passiv') {
+            // Passiv til Passiv (Flyt gæld): Den ene falder (-), den anden stiger (+)
+            valA = amt * -1 * currentDir;
+            valB = amt * currentDir;
+        } else if (acc.type === 'Passiv' && off.type === 'Aktiv') {
+            // Passiv til Aktiv (Udbetaling fra gæld): Begge falder (-)
+            valA = amt * -1 * currentDir;
+            valB = amt * -1 * currentDir;
+        } else {
+            // Standard (f.eks. Indtægt/Udgift til Aktiv): Klassisk Fra (-) Til (+)
+            valA = amt * -1 * currentDir;
+            valB = amt * currentDir;
+        }
+
         if (acc.type === 'Udgift') valA = Math.abs(amt) * -1;
 
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
@@ -274,43 +269,26 @@
 
     function renderResult() {
         let iT = 0, uT = 0;
-        let html = `<table><tr class="header-row"><td>INDTÆGTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Indtægt').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            iT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
+            iT += journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
         });
-        html += `<tr class="total-row"><td>Total Indtægter</td><td class="amount">${FMT(iT)}</td></tr></table>`;
-        html += `<table><tr class="header-row"><td>UDGIFTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Udgift').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(Math.abs(b))}</td></tr>`;
+            uT += journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
         });
-        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${FMT(Math.abs(uT))}</td></tr></table>`;
-        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${FMT(iT + uT)} kr.</div></div>`;
-        document.getElementById('res-content').innerHTML = html;
+        document.getElementById('res-content').innerHTML = `Indtægter: ${FMT(iT)} | Udgifter: ${FMT(Math.abs(uT))} | Resultat: ${FMT(iT + uT)}`;
     }
 
     function renderBalance() {
-        let aT = 0, pT = 0;
-        let html = `<table><tr class="header-row"><td>AKTIVER</td><td class="amount">Kr.</td></tr>`;
-        accounts.filter(a => a.type==='Aktiv').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            aT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
+        let html = "<table>";
+        accounts.filter(a => a.type==='Aktiv' || a.type==='Passiv').forEach(a => {
+            const sum = journal.filter(j => j.accId === a.id).reduce((s,j) => s + j.amount, 0);
+            html += `<tr><td>${a.name}</td><td class="amount">${FMT(sum)}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>TOTAL AKTIVER</td><td class="amount">${FMT(aT)}</td></tr></table>`;
-        html += `<table><tr class="header-row"><td>PASSIVER</td><td class="amount">Kr.</td></tr>`;
-        accounts.filter(a => a.type==='Passiv').forEach(a => {
-            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            pT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
-        });
-        const egenkapital = aT - pT;
-        html += `<tr><td>Egenkapital (Beregnet)</td><td class="amount">${FMT(egenkapital)}</td></tr>`;
-        html += `<tr class="total-row"><td>TOTAL PASSIVER</td><td class="amount">${FMT(pT + egenkapital)}</td></tr></table>`;
-        document.getElementById('bal-content').innerHTML = html;
+        document.getElementById('bal-content').innerHTML = html + "</table>";
     }
 
     function updateDash() {
-        const bank = journal.filter(j => j.accId === 3).reduce((s,j)=>s+j.amount,0);
+        const bank = journal.filter(j => j.accId === 3).reduce((s,j) => s + j.amount, 0);
         document.getElementById('dash-bank').innerText = FMT(bank) + " kr.";
         const i = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
         const u = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
@@ -322,7 +300,6 @@
             <div class="acc-edit-row">
                 <div style="font-weight:bold; width:30px;">${a.id}</div>
                 <input type="text" value="${a.name}" onchange="updateAccName(${a.id}, this.value)" style="margin:0; flex:1">
-                <div style="font-size:10px; color:gray; width:50px;">${a.type}</div>
                 ${journal.some(j=>j.accId===a.id) ? '' : `<button onclick="delAcc(${a.id})" style="color:red; background:none; border:none;">✕</button>`}
             </div>`).join('');
     }
@@ -352,35 +329,26 @@
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.setAttribute("download", "langdalsvej_data.csv");
+        link.setAttribute("download", "data.csv");
         link.click();
     }
 
     function importCSV(event) {
-        const file = event.target.files[0];
         const reader = new FileReader();
         reader.onload = function(e) {
             const lines = e.target.result.split('\n');
-            const newEntries = [];
             for(let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split(';');
                 if(cols.length < 5) continue;
-                const date = cols[0], accId = parseInt(cols[1]), offId = parseInt(cols[2]), desc = cols[3], amt = parseFloat(cols[4]);
-                if(!date || isNaN(accId)) continue;
-                const gid = "imp_" + Date.now() + "_" + i;
-                newEntries.push({ groupId: gid, date, accId, offId, amount: amt, desc, isPrimary: true });
-                newEntries.push({ groupId: gid, date, accId: offId, amount: amt * -1, desc: "Modpost: " + desc, isPrimary: false });
+                journal.push({ groupId: Date.now()+i+"", date: cols[0], accId: parseInt(cols[1]), offId: parseInt(cols[2]), amount: parseFloat(cols[4]), desc: cols[3], isPrimary: true });
             }
-            if(confirm("Importer " + (newEntries.length/2) + " posteringer?")) {
-                journal = journal.concat(newEntries);
-                localStorage.setItem('h_jou_v8', JSON.stringify(journal));
-                showView('home');
-            }
+            localStorage.setItem('h_jou_v8', JSON.stringify(journal));
+            showView('home');
         };
-        reader.readAsText(file);
+        reader.readAsText(event.target.files[0]);
     }
 
-    function clearAll() { if(confirm("Slet alt? Dette kan ikke fortrydes!")) { localStorage.clear(); location.reload(); } }
+    function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
     showView('home');
 </script>
 </body>
