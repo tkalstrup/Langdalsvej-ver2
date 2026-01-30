@@ -172,8 +172,6 @@
                 document.getElementById('entry-offset').value = j.offId;
                 document.getElementById('entry-desc').value = j.desc;
                 document.getElementById('entry-amount').value = Math.abs(j.amount);
-                currentDir = (j.amount < 0) ? 1 : -1;
-                document.getElementById('dir-arrow').innerText = currentDir === 1 ? "➔" : "⬅";
             }
         } else {
             document.getElementById('edit-id').value = "";
@@ -206,28 +204,26 @@
         const acc = accounts.find(a => a.id === accId);
         const off = accounts.find(a => a.id === offId);
         
-        // INTELLIGENT LOGIK TIL PASSIVER/AKTIVER
         let valA, valB;
 
-        if (acc.type === 'Passiv' && off.type === 'Passiv') {
-            // Intern flytning gæld: Fra mindsker (-), Til øger (+)
+        // DEN NYE LOGIK DER FIXER INDTÆGTER OG PASSIVER
+        if (acc.type === 'Indtægt') {
+            // Indtægt: Begge stiger (+)
+            valA = amt * currentDir;
+            valB = amt * currentDir;
+        } else if (acc.type === 'Passiv' && off.type === 'Passiv') {
+            // Passiv til Passiv: Fra falder (-), Til stiger (+)
             valA = amt * -1 * currentDir;
             valB = amt * currentDir;
         } else if (acc.type === 'Passiv' && off.type === 'Aktiv') {
-            // Modtagelse af penge (Gæld opstår): Begge stiger (+)
+            // Modtagelse af depositum (Passiv stiger, Aktiv stiger)
             valA = amt * currentDir;
             valB = amt * currentDir;
-        } else if (acc.type === 'Aktiv' && off.type === 'Passiv') {
-            // Udbetaling af gæld: Begge falder (-)
-            valA = amt * -1 * currentDir;
-            valB = amt * -1 * currentDir;
         } else {
-            // Standard (Indtægt/Udgift/Aktiv-Aktiv): Fra (-) Til (+)
+            // Standard (Udgift/Aktiv-Aktiv): Fra falder (-), Til stiger (+)
             valA = amt * -1 * currentDir;
             valB = amt * currentDir;
         }
-
-        if (acc.type === 'Udgift') valA = Math.abs(amt) * -1;
 
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId: offId, amount: valB, desc: "Modpost: " + document.getElementById('entry-desc').value, isPrimary: false });
@@ -325,7 +321,7 @@
     }
 
     function updateDash() {
-        const bank = journal.filter(j => j.accId === 3).reduce((s,j)=>s+j.amount,0);
+        const bank = journal.filter(j => j.accId === 3).reduce((s,j) => s + j.amount, 0);
         document.getElementById('dash-bank').innerText = FMT(bank) + " kr.";
         const i = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
         const u = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
