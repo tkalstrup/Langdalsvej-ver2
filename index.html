@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Langdalsvej Regnskab v10</title>
+    <title>Langdalsvej Regnskab</title>
     <style>
         :root { --primary: #5856D6; --success: #34C759; --danger: #FF3B30; --bg: #F2F2F7; --card: #FFFFFF; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 0; color: #1C1C1E; }
@@ -23,8 +23,8 @@
         button.primary { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; }
         .back-btn { width: 100%; background: none; border: 1px solid #DDD; color: #8E8E93; padding: 12px; border-radius: 12px; font-size: 14px; margin-top: 10px; }
         .journal-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid var(--primary); }
-        .direction-toggle { display: flex; align-items: center; justify-content: center; margin: 10px 0; font-size: 24px; cursor: pointer; background: #EEE; border-radius: 10px; padding: 5px; }
-        .logic-hint { font-size: 12px; color: #5856D6; text-align: center; margin: 10px 0; font-weight: 500; min-height: 1.2em; }
+        .direction-toggle { display: flex; align-items: center; justify-content: center; margin: 10px 0; font-size: 24px; cursor: pointer; background: #EEE; border-radius: 10px; padding: 5px; color: var(--primary); }
+        .logic-hint { font-size: 12px; color: #5856D6; text-align: center; margin-bottom: 10px; font-weight: 500; min-height: 1.2em; }
     </style>
 </head>
 <body>
@@ -44,7 +44,7 @@
         <button class="menu-btn" onclick="showView('journal')"><span>📋</span>Journal</button>
         <button class="menu-btn" onclick="showView('report-res')"><span>📈</span>Resultat</button>
         <button class="menu-btn" onclick="showView('report-bal')"><span>⚖️</span>Balance</button>
-        <button class="menu-btn" onclick="showView('accounts')" style="grid-column: span 2;"><span>⚙️</span>Konti</button>
+        <button class="menu-btn" onclick="showView('accounts')" style="grid-column: span 2;"><span>⚙️</span>Indstillinger & Konti</button>
     </div>
 </div>
 
@@ -52,15 +52,14 @@
     <h2 id="entry-title">Ny Postering</h2>
     <input type="hidden" id="edit-id">
     <input type="date" id="entry-date">
-    
-    <label>Fra Konto (Mindskes normalt)</label>
+    <label>Fra / Konto</label>
     <select id="entry-account" onchange="updateLogicHint()"></select>
     
     <div class="direction-toggle" onclick="toggleDirection()">
         <span id="dir-arrow">➔</span>
     </div>
 
-    <label>Til Konto (Øges normalt)</label>
+    <label>Til / Modkonto</label>
     <select id="entry-offset" onchange="updateLogicHint()"></select>
     
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
@@ -77,6 +76,7 @@
     <div id="journal-list"></div>
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
+
 <div id="view-report-res" class="view"><h2>Resultat</h2><div id="res-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
 <div id="view-report-bal" class="view"><h2>Balance</h2><div id="bal-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
 <div id="view-accounts" class="view"><h2>Konti</h2><div id="acc-list"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
@@ -85,13 +85,13 @@
     const FMT = (n) => n.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let currentDir = 1; 
 
-    let accounts = JSON.parse(localStorage.getItem('h_acc_v8')) || [
+    let accounts = JSON.parse(localStorage.getItem('h_acc_v7')) || [
         {id: 1, name: "Lejeindtægt", type: "Indtægt"},
         {id: 2, name: "Vedligehold", type: "Udgift"},
         {id: 3, name: "Bank", type: "Aktiv"},
         {id: 4, name: "Lån", type: "Passiv"}
     ];
-    let journal = JSON.parse(localStorage.getItem('h_jou_v8')) || [];
+    let journal = JSON.parse(localStorage.getItem('h_jou_v7')) || [];
 
     function showView(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -124,15 +124,11 @@
         const oId = document.getElementById('entry-offset').value;
         const acc = accounts.find(x => x.id == aId);
         const off = accounts.find(x => x.id == oId);
-        
         if (!acc || !off || amt === 0) return;
 
-        let txt = "";
-        if (currentDir === 1) {
-            txt = `Fjerner ${FMT(amt)} fra ${acc.name} og lægger dem på ${off.name}`;
-        } else {
-            txt = `Fjerner ${FMT(amt)} fra ${off.name} og lægger dem på ${acc.name}`;
-        }
+        let txt = currentDir === 1 
+            ? `Flytter ${FMT(amt)} fra ${acc.name} til ${off.name}` 
+            : `Flytter ${FMT(amt)} fra ${off.name} til ${acc.name}`;
         document.getElementById('logic-hint').innerText = txt;
     }
 
@@ -142,72 +138,76 @@
         const oId = parseInt(document.getElementById('entry-offset').value);
         if(!amt) return;
 
-        const acc = accounts.find(x => x.id === aId);
-        const off = accounts.find(x => x.id === oId);
-        const gid = Date.now().toString();
-        const date = document.getElementById('entry-date').value;
-        const desc = document.getElementById('entry-desc').value;
-
-        // DENNE LOGIK SIKRER RIGTIGT FORTEGN PÅ PASSIVER
-        // Ved ➔: Konto A falder (-), Konto B stiger (+)
-        // Da passiver er positive som gæld, vil +407 på en passiv-konto øge saldoen.
+        const groupId = Date.now().toString();
+        const acc = accounts.find(a => a.id === aId);
+        const off = accounts.find(a => a.id === oId);
         
+        // Bogføringslogik for at sikre korrekte saldi uden minus:
+        // Ved ➔: Konto A falder, Konto B stiger.
         let valA = amt * -1 * currentDir;
         let valB = amt * 1 * currentDir;
 
-        // Særlig regel for udgifter: De skal altid ende som negative i systemet for at trække fra indtægt
-        if (acc.type === "Udgift") valA = amt * -1; 
+        // Særlig regel: Hvis Konto A er en udgift, skal den altid trække fra resultatet (-)
+        if (acc.type === 'Udgift') valA = amt * -1;
 
-        journal.push({ groupId: gid, date, accId: aId, amount: valA, desc, isPrimary: true, offId: oId });
-        journal.push({ groupId: gid, date, accId: oId, amount: valB, desc: "Modpost: " + desc, isPrimary: false });
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId: aId, offId: oId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId: oId, amount: valB, desc: "Modpost: " + document.getElementById('entry-desc').value, isPrimary: false });
 
-        localStorage.setItem('h_jou_v8', JSON.stringify(journal));
+        localStorage.setItem('h_jou_v7', JSON.stringify(journal));
         showView('home');
     }
 
-    // Standard funktioner til visning
+    function reversePost(gid) {
+        const original = journal.filter(j => j.groupId === gid);
+        const newGid = "rev_" + Date.now();
+        original.forEach(o => {
+            journal.push({...o, groupId: newGid, amount: o.amount * -1, desc: "TILBAGEFØRSEL: " + o.desc, date: new Date().toISOString().split('T')[0]});
+        });
+        localStorage.setItem('h_jou_v7', JSON.stringify(journal));
+        renderJournal();
+    }
+
     function renderJournal() {
         document.getElementById('journal-list').innerHTML = journal.filter(j => j.isPrimary).reverse().map(j => `
             <div class="journal-item">
-                <div style="font-size:11px">${j.date}</div>
-                <strong>${j.desc}</strong><br>
-                ${accounts.find(a=>a.id==j.accId).name}: ${FMT(j.amount)} kr.
-                <button onclick="deletePost('${j.groupId}')" style="float:right; color:red">Slet</button>
+                <div style="font-size:11px; color:gray">${j.date}</div>
+                <strong>${j.desc}</strong>
+                <div style="display:flex; justify-content:space-between">
+                    <span>${accounts.find(a=>a.id==j.accId)?.name}</span>
+                    <span>${FMT(j.amount)} kr.</span>
+                </div>
+                <div class="action-btns" style="margin-top:10px">
+                    <button onclick="reversePost('${j.groupId}')">Tilbagefør</button>
+                    <button style="color:red; margin-left:10px" onclick="journal=journal.filter(x=>x.groupId!=='${j.groupId}');localStorage.setItem('h_jou_v7',JSON.stringify(journal));renderJournal()">Slet</button>
+                </div>
             </div>`).join('');
     }
 
-    function deletePost(gid) { journal = journal.filter(j => j.groupId !== gid); localStorage.setItem('h_jou_v8', JSON.stringify(journal)); renderJournal(); }
+    function renderResult() {
+        let iT = 0, uT = 0;
+        accounts.filter(a => a.type === 'Indtægt' || a.type === 'Udgift').forEach(a => {
+            const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
+            if(a.type === 'Indtægt') iT += b; else uT += b;
+        });
+        document.getElementById('res-content').innerHTML = `Resultat: ${FMT(iT + uT)} kr.`;
+    }
 
     function renderBalance() {
         let html = "<table>";
         accounts.filter(a => a.type === 'Aktiv' || a.type === 'Passiv').forEach(a => {
             const sum = journal.filter(j => j.accId === a.id).reduce((s,j) => s + j.amount, 0);
-            html += `<tr><td>${a.name} (${a.type})</td><td class="amount">${FMT(sum)}</td></tr>`;
+            html += `<tr><td>${a.name}</td><td class="amount">${FMT(sum)}</td></tr>`;
         });
         html += "</table>";
         document.getElementById('bal-content').innerHTML = html;
     }
 
-    function renderResult() {
-        let res = 0;
-        let html = "<table>";
-        accounts.filter(a => a.type === 'Indtægt' || a.type === 'Udgift').forEach(a => {
-            const sum = journal.filter(j => j.accId === a.id).reduce((s,j) => s + j.amount, 0);
-            res += sum;
-            html += `<tr><td>${a.name}</td><td class="amount">${FMT(sum)}</td></tr>`;
-        });
-        html += `<tr class="total-row"><td>RESULTAT</td><td class="amount">${FMT(res)}</td></tr></table>`;
-        document.getElementById('res-content').innerHTML = html;
-    }
-
     function updateDash() {
         const bank = journal.filter(j => j.accId === 3).reduce((s,j) => s + j.amount, 0);
         document.getElementById('dash-bank').innerText = FMT(bank) + " kr.";
-        const res = journal.filter(j => {
-            const acc = accounts.find(a => a.id === j.accId);
-            return acc.type === 'Indtægt' || acc.type === 'Udgift';
-        }).reduce((s,j) => s + j.amount, 0);
-        document.getElementById('dash-ytd').innerText = FMT(res) + " kr.";
+        const i = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Indtægt').reduce((s,j)=>s+j.amount,0);
+        const u = journal.filter(j => accounts.find(a=>a.id==j.accId).type==='Udgift').reduce((s,j)=>s+j.amount,0);
+        document.getElementById('dash-ytd').innerText = FMT(i + u) + " kr.";
     }
 
     function renderAccounts() {
