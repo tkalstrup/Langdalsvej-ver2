@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Udlejning Pro</title>
+    <title>Udlejning Pro v2</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <style>
@@ -15,98 +15,95 @@
         .stat-label { font-size: 12px; color: #8E8E93; text-transform: uppercase; }
         .stat-value { font-size: 22px; font-weight: bold; margin-top: 5px; }
         .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .menu-btn { background: var(--card); border: none; padding: 20px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .menu-btn { background: var(--card); border: none; padding: 20px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 10px; }
         input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #DDD; font-size: 16px; box-sizing: border-box; }
         .num-pad { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
         .num-btn { background: white; border: 1px solid #DDD; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; background: white; border-radius: 15px; overflow: hidden; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #EEE; }
-        .res-total { font-weight: bold; background: #f8f8f8; }
-        button.primary { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 15px; margin-bottom: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #EEE; }
+        .header-row { background: #f8f8f8; font-weight: bold; color: var(--primary); }
+        .total-row { font-weight: bold; border-top: 2px solid #EEE; }
+        button.primary { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="view-home" class="view active">
-    <h1>Husleje Regnskab</h1>
+    <h1>Dashboard</h1>
     <div class="stat-card">
-        <div class="stat-label">Resultat i år (YTD)</div>
+        <div class="stat-label">Resultat (YTD)</div>
         <div id="dash-ytd" class="stat-value">0 kr.</div>
     </div>
     <div class="stat-card">
-        <div class="stat-label">Egenkapital (Balance)</div>
-        <div id="dash-equity" class="stat-value">0 kr.</div>
+        <div class="stat-label">Bank Beholdning</div>
+        <div id="dash-bank" class="stat-value" style="color:var(--success)">0 kr.</div>
     </div>
     <div class="menu-grid">
         <button class="menu-btn" onclick="showView('entry')"><span>➕</span>Kassekladde</button>
         <button class="menu-btn" onclick="showView('report-res')"><span>📈</span>Resultat</button>
         <button class="menu-btn" onclick="showView('report-bal')"><span>⚖️</span>Balance</button>
-        <button class="menu-btn" onclick="showView('accounts')"><span>⚙️</span>Konti / CSV</button>
+        <button class="menu-btn" onclick="showView('accounts')"><span>⚙️</span>Indstillinger</button>
     </div>
 </div>
 
 <div id="view-entry" class="view">
-    <h2>Indtast Postering</h2>
+    <h2>Ny Postering</h2>
     <input type="date" id="entry-date">
+    <label style="font-size:12px; color:gray;">Hvilken konto (Indtægt/Udgift)?</label>
     <select id="entry-account"></select>
-    <input type="text" id="entry-desc" placeholder="Tekst (f.eks. Maling)">
-    <input type="text" id="entry-amount" readonly placeholder="0" style="text-align: right; font-size: 28px; font-weight: bold; color: var(--primary);">
+    <label style="font-size:12px; color:gray;">Modkonto (Hvor kommer pengene fra/til?)</label>
+    <select id="entry-offset"></select>
+    <input type="text" id="entry-desc" placeholder="Tekst">
+    <input type="text" id="entry-amount" readonly placeholder="0" style="text-align: right; font-size: 28px; font-weight: bold;">
     <div class="num-pad" id="numpad"></div>
-    <button class="primary" onclick="saveEntry()">BOGFØR</button>
-    <button onclick="showView('home')" style="width:100%; background:none; border:none; color:gray; margin-top:10px;">Fortryd</button>
+    <button class="primary" style="margin-top:20px" onclick="saveEntry()">BOGFØR</button>
 </div>
 
 <div id="view-report-res" class="view">
     <h2>Resultatopgørelse</h2>
-    <table id="res-table"></table>
+    <div id="res-content"></div>
     <button class="primary" onclick="showView('home')">Tilbage</button>
 </div>
 
 <div id="view-report-bal" class="view">
     <h2>Balance</h2>
-    <table id="bal-table"></table>
+    <div id="bal-content"></div>
     <button class="primary" onclick="showView('home')">Tilbage</button>
 </div>
 
 <div id="view-accounts" class="view">
-    <h2>Konti & Eksport</h2>
-    <div class="stat-card">
-        <input type="text" id="new-acc-name" placeholder="Nyt kontonavn">
-        <select id="new-acc-type">
-            <option value="Indtægt">Indtægt</option>
-            <option value="Udgift">Udgift</option>
-            <option value="Aktiv">Aktiv (Bank/Ejendom)</option>
-            <option value="Passiv">Passiv (Lån/Egenkapital)</option>
-        </select>
-        <button class="primary" onclick="addAccount()">Opret Konto</button>
-    </div>
+    <h2>Konti & CSV</h2>
     <div id="acc-list"></div>
-    <button class="primary" style="background:var(--success)" onclick="exportCSV()">SEND CSV FIL</button>
-    <button onclick="showView('home')" style="width:100%; background:none; border:none; color:gray; margin-top:10px;">Tilbage</button>
+    <button class="primary" style="background:var(--success); margin-top:20px;" onclick="exportCSV()">EKSPORTER CSV</button>
+    <button class="primary" style="background:var(--danger); margin-top:10px;" onclick="clearAll()">SLET ALT DATA</button>
+    <button onclick="showView('home')" style="width:100%; background:none; border:none; color:gray; margin-top:15px;">Tilbage</button>
 </div>
 
 <script>
-    let accounts = JSON.parse(localStorage.getItem('house_acc')) || [
+    let accounts = JSON.parse(localStorage.getItem('h_acc')) || [
         {id: 1, name: "Lejeindtægt", type: "Indtægt"},
-        {id: 2, name: "Vedligeholdelse", type: "Udgift"},
+        {id: 2, name: "Vedligehold", type: "Udgift"},
         {id: 3, name: "Bank", type: "Aktiv"},
         {id: 4, name: "Egenkapital", type: "Passiv"}
     ];
-    let journal = JSON.parse(localStorage.getItem('house_jou')) || [];
+    let journal = JSON.parse(localStorage.getItem('h_jou')) || [];
 
     function showView(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById('view-'+id).classList.add('active');
         if(id==='home') updateDash();
         if(id==='entry') renderEntry();
+        if(id==='report-res') renderResult();
+        if(id==='report-bal') renderBalance();
         if(id==='accounts') renderAccounts();
-        if(id==='report-res') renderReport('res');
-        if(id==='report-bal') renderReport('bal');
     }
 
     function renderEntry() {
         document.getElementById('entry-date').valueAsDate = new Date();
-        document.getElementById('entry-account').innerHTML = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        const opts = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        document.getElementById('entry-account').innerHTML = opts;
+        document.getElementById('entry-offset').innerHTML = opts;
+        document.getElementById('entry-offset').value = 3; // Default til Bank
         document.getElementById('entry-amount').value = "";
         const pad = document.getElementById('numpad');
         pad.innerHTML = [...Array(9).keys()].map(i => `<button class="num-btn" onclick="press('${i+1}')">${i+1}</button>`).join('') + 
@@ -120,69 +117,78 @@
 
     function saveEntry() {
         const amt = parseFloat(document.getElementById('entry-amount').value);
-        if(!amt) return;
-        journal.push({
-            date: document.getElementById('entry-date').value,
-            accId: parseInt(document.getElementById('entry-account').value),
-            desc: document.getElementById('entry-desc').value,
-            amount: amt
-        });
-        localStorage.setItem('house_jou', JSON.stringify(journal));
+        const accId = parseInt(document.getElementById('entry-account').value);
+        const offId = parseInt(document.getElementById('entry-offset').value);
+        if(!amt || accId === offId) return alert("Ugyldig postering");
+        
+        // Gemmer to linjer (Dobbelt bogføring)
+        journal.push({ date: document.getElementById('entry-date').value, accId: accId, amount: amt, desc: document.getElementById('entry-desc').value });
+        journal.push({ date: document.getElementById('entry-date').value, accId: offId, amount: -amt, desc: "Modpost: " + document.getElementById('entry-desc').value });
+        
+        localStorage.setItem('h_jou', JSON.stringify(journal));
         showView('home');
     }
 
-    function renderReport(type) {
-        const table = document.getElementById(type + '-table');
-        let html = `<tr><th>Konto</th><th style="text-align:right">Beløb</th></tr>`;
-        let total = 0;
+    function getBalance(accId) {
+        return journal.filter(j => j.accId === accId).reduce((s, j) => s + j.amount, 0);
+    }
+
+    function renderResult() {
+        const content = document.getElementById('res-content');
+        let incTotal = 0, expTotal = 0;
         
-        accounts.filter(a => type === 'res' ? (a.type==='Indtægt' || a.type==='Udgift') : (a.type==='Aktiv' || a.type==='Passiv')).forEach(a => {
-            const sum = journal.filter(j => j.accId === a.id).reduce((s, j) => s + j.amount, 0);
-            html += `<tr><td>${a.name}</td><td style="text-align:right">${sum.toLocaleString()} kr.</td></tr>`;
-            if(a.type === 'Indtægt' || a.type === 'Aktiv') total += sum; else total -= sum;
+        let html = `<table><tr class="header-row"><td>INDTÆGTER</td><td align="right">Beløb</td></tr>`;
+        accounts.filter(a => a.type==='Indtægt').forEach(a => {
+            const b = getBalance(a.id); incTotal += b;
+            html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
         });
-        
-        html += `<tr class="res-total"><td>TOTAL</td><td style="text-align:right">${Math.abs(total).toLocaleString()} kr.</td></tr>`;
-        table.innerHTML = html;
+        html += `<tr class="total-row"><td>Total Indtægter</td><td align="right">${incTotal.toLocaleString()}</td></tr></table>`;
+
+        html += `<table><tr class="header-row"><td>UDGIFTER</td><td align="right">Beløb</td></tr>`;
+        accounts.filter(a => a.type==='Udgift').forEach(a => {
+            const b = getBalance(a.id); expTotal += b;
+            html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+        });
+        html += `<tr class="total-row"><td>Total Udgifter</td><td align="right">${expTotal.toLocaleString()}</td></tr></table>`;
+
+        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${(incTotal - expTotal).toLocaleString()} kr.</div></div>`;
+        content.innerHTML = html;
+    }
+
+    function renderBalance() {
+        const content = document.getElementById('bal-content');
+        let actTotal = 0, pasTotal = 0;
+        let html = `<table><tr class="header-row"><td>AKTIVER</td><td align="right">Beløb</td></tr>`;
+        accounts.filter(a => a.type==='Aktiv').forEach(a => {
+            const b = getBalance(a.id); actTotal += b;
+            html += `<tr><td>${a.name}</td><td align="right">${b.toLocaleString()}</td></tr>`;
+        });
+        html += `<tr class="total-row"><td>Total Aktiver</td><td align="right">${actTotal.toLocaleString()}</td></tr></table>`;
+        content.innerHTML = html;
     }
 
     function updateDash() {
-        let res = 0;
-        journal.forEach(j => {
-            const a = accounts.find(acc => acc.id === j.accId);
-            if(a.type === 'Indtægt') res += j.amount; if(a.type === 'Udgift') res -= j.amount;
-        });
-        document.getElementById('dash-ytd').innerText = res.toLocaleString() + " kr.";
+        let bank = getBalance(3); // Bank ID
+        document.getElementById('dash-bank').innerText = bank.toLocaleString() + " kr.";
+        // Simpelt resultat check
+        let inc = accounts.filter(a=>a.type==='Indtægt').reduce((s,a)=> s+getBalance(a.id), 0);
+        let exp = accounts.filter(a=>a.type==='Udgift').reduce((s,a)=> s+getBalance(a.id), 0);
+        document.getElementById('dash-ytd').innerText = (inc - exp).toLocaleString() + " kr.";
     }
 
     function renderAccounts() {
-        document.getElementById('acc-list').innerHTML = accounts.map(a => `
-            <div style="display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #ddd;">
-                <span>${a.name} (${a.type})</span>
-                ${journal.some(j => j.accId === a.id) ? '🔒' : `<button onclick="delAcc(${a.id})">Slet</button>`}
-            </div>`).join('');
+        document.getElementById('acc-list').innerHTML = accounts.map(a => `<div class="stat-card">${a.name} (${a.type})</div>`).join('');
     }
 
-    function addAccount() {
-        const name = document.getElementById('new-acc-name').value;
-        if(!name) return;
-        accounts.push({id: Date.now(), name, type: document.getElementById('new-acc-type').value});
-        localStorage.setItem('house_acc', JSON.stringify(accounts));
-        renderAccounts();
-    }
-
-    function delAcc(id) { accounts = accounts.filter(a => a.id !== id); localStorage.setItem('house_acc', JSON.stringify(accounts)); renderAccounts(); }
+    function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
 
     function exportCSV() {
-        let csv = "\uFEFFDato;Konto;Type;Beskrivelse;Beløb\n";
+        let csv = "\uFEFFDato;Konto;Beløb;Tekst\n";
         journal.forEach(j => {
             const a = accounts.find(acc => acc.id === j.accId);
-            csv += `${j.date};${a.name};${a.type};${j.desc};${j.amount}\n`;
+            csv += `${j.date};${a.name};${j.amount};${j.desc}\n`;
         });
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + csv));
-        link.setAttribute("download", "regnskab.csv");
-        link.click();
+        window.open(encodeURI("data:text/csv;charset=utf-8," + csv));
     }
 
     updateDash();
