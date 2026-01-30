@@ -21,12 +21,13 @@
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #EEE; }
         .header-row { background: #f8f8f8; font-weight: bold; color: var(--primary); }
         .total-row { font-weight: bold; background: #fafafa; border-top: 2px solid #EEE; }
-        .amount { text-align: right; width: 100px; font-variant-numeric: tabular-nums; }
+        .amount { text-align: right; width: 120px; font-variant-numeric: tabular-nums; }
         button.primary { width: 100%; background: var(--primary); color: white; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; margin-top: 10px; }
         .back-btn { width: 100%; background: none; border: 1px solid #DDD; color: #8E8E93; padding: 12px; border-radius: 12px; font-size: 14px; margin-top: 10px; }
         .journal-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 5px solid var(--primary); }
         .action-btns { display: flex; gap: 10px; margin-top: 10px; }
         .action-btns button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #EEE; font-size: 12px; }
+        .import-area { border: 2px dashed #DDD; padding: 15px; border-radius: 10px; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -35,11 +36,11 @@
     <h1>Langdalsvej</h1>
     <div class="stat-card">
         <div class="stat-label">Årets Resultat (Netto)</div>
-        <div id="dash-ytd" class="stat-value">0 kr.</div>
+        <div id="dash-ytd" class="stat-value">0,00 kr.</div>
     </div>
     <div class="stat-card">
         <div class="stat-label">Bank Beholdning</div>
-        <div id="dash-bank" class="stat-value" style="color:var(--success)">0 kr.</div>
+        <div id="dash-bank" class="stat-value" style="color:var(--success)">0,00 kr.</div>
     </div>
     <div class="menu-grid">
         <button class="menu-btn" onclick="showView('entry')"><span>➕</span>Kassekladde</button>
@@ -59,7 +60,7 @@
     <label>Modkonto</label>
     <select id="entry-offset"></select>
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
-    <input type="number" id="entry-amount" placeholder="Beløb" style="text-align: right; font-size: 28px; font-weight: bold;">
+    <input type="number" step="0.01" id="entry-amount" placeholder="Beløb" style="text-align: right; font-size: 28px; font-weight: bold;">
     <button class="primary" onclick="saveEntry()">BOGFØR</button>
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
@@ -96,24 +97,34 @@
     </div>
     <div id="acc-list"></div>
     <button class="primary" style="background:var(--success)" onclick="exportCSV()">EKSPORTER CSV</button>
+    
+    <div class="import-area">
+        <div style="font-size: 12px; margin-bottom: 10px;">Importer CSV (Dato;KontoID;ModID;Beskrivelse;Beløb)</div>
+        <input type="file" id="csv-file" accept=".csv" onchange="importCSV(event)">
+    </div>
+
     <button class="primary" style="background:var(--danger)" onclick="clearAll()">SLET ALT DATA</button>
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
 
 <script>
-    let accounts = JSON.parse(localStorage.getItem('h_acc_v5')) || [
+    // Dansk formatering med 2 decimaler
+    const FMT = (n) => n.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    let accounts = JSON.parse(localStorage.getItem('h_acc_v6')) || [
         {id: 1, name: "Lejeindtægt", type: "Indtægt"},
         {id: 2, name: "Vedligehold", type: "Udgift"},
         {id: 3, name: "Bank", type: "Aktiv"},
         {id: 4, name: "Lån", type: "Passiv"}
     ];
-    let journal = JSON.parse(localStorage.getItem('h_jou_v5')) || [];
+    let journal = JSON.parse(localStorage.getItem('h_jou_v6')) || [];
 
     function showView(id) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         document.getElementById('view-'+id).classList.add('active');
         if(id==='home') updateDash();
-        if(id==='entry') renderEntry();
+        // Nulstil kassekladde ved skift til den, medmindre vi redigerer
+        if(id==='entry' && !document.getElementById('edit-id').value) renderEntry();
         if(id==='journal') renderJournal();
         if(id==='report-res') renderResult();
         if(id==='report-bal') renderBalance();
@@ -125,18 +136,19 @@
         const opts = accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
         document.getElementById('entry-account').innerHTML = opts;
         document.getElementById('entry-offset').innerHTML = opts;
-        document.getElementById('entry-offset').value = 3;
-        document.getElementById('edit-id').value = editId || "";
         
         if(editId) {
             const j = journal.find(x => x.groupId === editId && x.isPrimary);
+            document.getElementById('edit-id').value = editId;
             document.getElementById('entry-date').value = j.date;
             document.getElementById('entry-account').value = j.accId;
             document.getElementById('entry-offset').value = j.offId;
             document.getElementById('entry-desc').value = j.desc;
             document.getElementById('entry-amount').value = j.amount;
         } else {
+            document.getElementById('edit-id').value = "";
             document.getElementById('entry-date').valueAsDate = new Date();
+            document.getElementById('entry-offset').value = 3;
             document.getElementById('entry-desc').value = "";
             document.getElementById('entry-amount').value = "";
         }
@@ -147,17 +159,17 @@
         const accId = parseInt(document.getElementById('entry-account').value);
         const offId = parseInt(document.getElementById('entry-offset').value);
         const editId = document.getElementById('edit-id').value;
-        if(!amt || accId === offId) return alert("Fejl");
+        if(!amt || accId === offId) return alert("Ugyldig indtastning");
 
         if(editId) journal = journal.filter(j => j.groupId !== editId);
         const groupId = editId || Date.now().toString();
-        const acc = accounts.find(a => a.id === accId);
-        const factor = (acc.type === 'Udgift') ? -1 : 1;
+        const factor = (accounts.find(a => a.id === accId).type === 'Udgift') ? -1 : 1;
 
-        journal.push({ groupId, date: document.getElementById('entry-date').value, accId, amount: amt, desc: document.getElementById('entry-desc').value, isPrimary: true, offId });
+        journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: amt, desc: document.getElementById('entry-desc').value, isPrimary: true });
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId: offId, amount: amt * factor, desc: "Modpost: " + document.getElementById('entry-desc').value, isPrimary: false });
 
-        localStorage.setItem('h_jou_v5', JSON.stringify(journal));
+        localStorage.setItem('h_jou_v6', JSON.stringify(journal));
+        document.getElementById('edit-id').value = ""; // Ryd edit flag
         showView('home');
     }
 
@@ -168,7 +180,7 @@
                 <strong>${j.desc}</strong>
                 <div style="display:flex; justify-content:space-between">
                     <span>${accounts.find(a=>a.id==j.accId).name}</span>
-                    <span class="amount">${j.amount.toLocaleString()} kr.</span>
+                    <span class="amount">${FMT(j.amount)} kr.</span>
                 </div>
                 <div class="action-btns">
                     <button onclick="renderEntry('${j.groupId}'); showView('entry');">Rediger</button>
@@ -180,7 +192,7 @@
     function deletePost(gid) {
         if(confirm("Slet postering?")) {
             journal = journal.filter(g => g.groupId !== gid);
-            localStorage.setItem('h_jou_v5', JSON.stringify(journal));
+            localStorage.setItem('h_jou_v6', JSON.stringify(journal));
             renderJournal();
         }
     }
@@ -190,18 +202,17 @@
         let html = `<table><tr class="header-row"><td>INDTÆGTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Indtægt').forEach(a => {
             const b = journal.filter(j => j.accId === a.id && j.isPrimary).reduce((s,j)=>s+j.amount,0);
-            iT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
+            iT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>Total Indtægter</td><td class="amount">${iT.toLocaleString()}</td></tr></table>`;
+        html += `<tr class="total-row"><td>Total Indtægter</td><td class="amount">${FMT(iT)}</td></tr></table>`;
         
         html += `<table><tr class="header-row"><td>UDGIFTER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Udgift').forEach(a => {
             const b = journal.filter(j => j.accId === a.id && j.isPrimary).reduce((s,j)=>s+j.amount,0);
-            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
+            uT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${uT.toLocaleString()}</td></tr></table>`;
-        
-        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${(iT - uT).toLocaleString()} kr.</div></div>`;
+        html += `<tr class="total-row"><td>Total Udgifter</td><td class="amount">${FMT(uT)}</td></tr></table>`;
+        html += `<div class="stat-card" style="text-align:center"><div class="stat-label">ÅRETS RESULTAT</div><div class="stat-value">${FMT(iT - uT)} kr.</div></div>`;
         document.getElementById('res-content').innerHTML = html;
     }
 
@@ -210,45 +221,77 @@
         let html = `<table><tr class="header-row"><td>AKTIVER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Aktiv').forEach(a => {
             const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            aT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
+            aT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
         });
-        html += `<tr class="total-row"><td>TOTAL AKTIVER</td><td class="amount">${aT.toLocaleString()}</td></tr></table>`;
-
+        html += `<tr class="total-row"><td>TOTAL AKTIVER</td><td class="amount">${FMT(aT)}</td></tr></table>`;
         html += `<table><tr class="header-row"><td>PASSIVER</td><td class="amount">Kr.</td></tr>`;
         accounts.filter(a => a.type==='Passiv').forEach(a => {
             const b = journal.filter(j => j.accId === a.id).reduce((s,j)=>s+j.amount,0);
-            pT += b; html += `<tr><td>${a.name}</td><td class="amount">${b.toLocaleString()}</td></tr>`;
+            pT += b; html += `<tr><td>${a.name}</td><td class="amount">${FMT(b)}</td></tr>`;
         });
         const egenkapital = aT - pT;
-        html += `<tr><td>Egenkapital (Beregnet)</td><td class="amount">${egenkapital.toLocaleString()}</td></tr>`;
-        html += `<tr class="total-row"><td>TOTAL PASSIVER</td><td class="amount">${(pT + (aT-pT)).toLocaleString()}</td></tr></table>`;
+        html += `<tr><td>Egenkapital (Beregnet)</td><td class="amount">${FMT(egenkapital)}</td></tr>`;
+        html += `<tr class="total-row"><td>TOTAL PASSIVER</td><td class="amount">${FMT(pT + egenkapital)}</td></tr></table>`;
         document.getElementById('bal-content').innerHTML = html;
     }
 
     function updateDash() {
         const bank = journal.filter(j => j.accId === 3).reduce((s,j)=>s+j.amount,0);
-        document.getElementById('dash-bank').innerText = bank.toLocaleString() + " kr.";
+        document.getElementById('dash-bank').innerText = FMT(bank) + " kr.";
         const i = accounts.filter(a=>a.type==='Indtægt').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0);
         const u = accounts.filter(a=>a.type==='Udgift').reduce((s,a)=>s+journal.filter(j=>j.accId===a.id && j.isPrimary).reduce((sum,j)=>sum+j.amount,0),0);
-        document.getElementById('dash-ytd').innerText = (i - u).toLocaleString() + " kr.";
+        document.getElementById('dash-ytd').innerText = FMT(i - u) + " kr.";
     }
 
     function renderAccounts() {
-        document.getElementById('acc-list').innerHTML = accounts.map(a => `<div class="stat-card" style="display:flex; justify-content:space-between">${a.name} (${a.type}) ${journal.some(j=>j.accId===a.id) ? '🔒' : `<button onclick="delAcc(${a.id})">Slet</button>`}</div>`).join('');
+        document.getElementById('acc-list').innerHTML = accounts.map(a => `<div class="stat-card" style="display:flex; justify-content:space-between"><span>${a.name} (${a.type}) [ID:${a.id}]</span> ${journal.some(j=>j.accId===a.id) ? '🔒' : `<button onclick="delAcc(${a.id})">Slet</button>`}</div>`).join('');
     }
 
-    function delAcc(id) { accounts = accounts.filter(x=>x.id!==id); localStorage.setItem('h_acc_v5', JSON.stringify(accounts)); renderAccounts(); }
-    
+    function delAcc(id) { accounts = accounts.filter(x=>x.id!==id); localStorage.setItem('h_acc_v6', JSON.stringify(accounts)); renderAccounts(); }
     function addAccount() {
         const n = document.getElementById('new-acc-name').value;
         const t = document.getElementById('new-acc-type').value;
-        if(n) { accounts.push({id:Date.now(), name:n, type:t}); localStorage.setItem('h_acc_v5', JSON.stringify(accounts)); renderAccounts(); document.getElementById('new-acc-name').value=""; }
+        if(n) { accounts.push({id:Date.now(), name:n, type:t}); localStorage.setItem('h_acc_v6', JSON.stringify(accounts)); renderAccounts(); document.getElementById('new-acc-name').value=""; }
     }
 
     function exportCSV() {
-        let csv = "\uFEFFDato;Konto;Beskrivelse;Beløb\n";
-        journal.forEach(j => csv += `${j.date};${accounts.find(a=>a.id==j.accId).name};${j.desc};${j.amount}\n`);
-        window.open(encodeURI("data:text/csv;charset=utf-8," + csv));
+        let csv = "Dato;KontoID;ModID;Beskrivelse;Beløb\n";
+        journal.filter(j => j.isPrimary).forEach(j => {
+            csv += `${j.date};${j.accId};${j.offId};${j.desc};${j.amount}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", "langdalsvej_data.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function importCSV(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n');
+            const newEntries = [];
+            for(let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(';');
+                if(cols.length < 5) continue;
+                const date = cols[0], accId = parseInt(cols[1]), offId = parseInt(cols[2]), desc = cols[3], amt = parseFloat(cols[4]);
+                if(!date || isNaN(accId)) continue;
+                const gid = Date.now() + i + "";
+                const factor = (accounts.find(a => a.id === accId)?.type === 'Udgift') ? -1 : 1;
+                newEntries.push({ groupId: gid, date, accId, offId, amount: amt, desc, isPrimary: true });
+                newEntries.push({ groupId: gid, date, accId: offId, amount: amt * factor, desc: "Modpost: " + desc, isPrimary: false });
+            }
+            if(confirm("Importer " + (newEntries.length/2) + " posteringer? Dette overskriver ikke eksisterende data.")) {
+                journal = journal.concat(newEntries);
+                localStorage.setItem('h_jou_v6', JSON.stringify(journal));
+                updateDash();
+                alert("Import gennemført.");
+            }
+        };
+        reader.readAsText(file);
     }
 
     function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
