@@ -57,14 +57,14 @@
     <h2 id="entry-title">Ny Postering</h2>
     <input type="hidden" id="edit-id">
     <input type="date" id="entry-date">
-    <label>Fra / Konto</label>
+    <label>Fra / Konto (Mindskes)</label>
     <select id="entry-account" onchange="updateLogicHint()"></select>
     <br>
     <div class="direction-toggle" onclick="toggleDirection()">
         <span id="dir-arrow">➔</span>
     </div>
 
-    <label>Til / Modkonto</label>
+    <label>Til / Modkonto (Øges)</label>
     <select id="entry-offset" onchange="updateLogicHint()"></select>
     <br>
     <input type="text" id="entry-desc" placeholder="Beskrivelse">
@@ -204,16 +204,14 @@
         if(editId) journal = journal.filter(j => j.groupId !== editId);
         const groupId = editId || Date.now().toString();
         const acc = accounts.find(a => a.id === accId);
-        const off = accounts.find(a => a.id === offId);
         
-        // Logik: ➔ betyder beløbet forlader Konto og går til Modkonto.
-        // For Aktiver: Ud (-) Ind (+)
-        // For Passiver (Depositum/Gæld): Ud/Mindre gæld (-) Ind/Mere gæld (+)
-        
+        // HER ER FIXET:
+        // valA (Fra-konto) bliver negativ. valB (Til-konto) bliver positiv.
+        // strømmen vendes hvis pilen peger til venstre (currentDir = -1)
         let valA = amt * -1 * currentDir;
         let valB = amt * currentDir;
 
-        // Særregel for Udgift-konti: De skal altid gemmes som negative for at trække fra indtægt
+        // Særregel for Udgift: Skal altid trække fra resultat
         if (acc.type === 'Udgift') valA = Math.abs(amt) * -1;
 
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
