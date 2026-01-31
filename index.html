@@ -78,7 +78,7 @@
 
 <div id="view-journal" class="view">
     <h2>Journal</h2>
-    <div class="filter-grid" style="display: flex; gap: 10px; margin-bottom: 15px;">
+    <div class="filter-grid" style="display: flex; gap: 10px; margin-bottom: 10px;">
         <select id="filter-acc" onchange="renderJournal()"><option value="all">Alle Konti</option></select>
         <select id="filter-year" onchange="renderJournal()"><option value="all">Alle År</option></select>
     </div>
@@ -86,8 +86,17 @@
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
 
-<div id="view-report-res" class="view"><h2>Resultatopgørelse</h2><div id="res-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
-<div id="view-report-bal" class="view"><h2>Balance</h2><div id="bal-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
+<div id="view-report-res" class="view">
+    <h2>Resultatopgørelse</h2>
+    <div id="res-content"></div>
+    <button class="back-btn" onclick="showView('home')">Tilbage</button>
+</div>
+
+<div id="view-report-bal" class="view">
+    <h2>Balance</h2>
+    <div id="bal-content"></div>
+    <button class="back-btn" onclick="showView('home')">Tilbage</button>
+</div>
 
 <div id="view-accounts" class="view">
     <h2>Kontostyring</h2>
@@ -179,7 +188,7 @@
         const acc = accounts.find(a => a.id == document.getElementById('entry-account').value);
         const off = accounts.find(a => a.id == document.getElementById('entry-offset').value);
         if (!acc || !off || amt === 0) return;
-        let hint = currentDir === 1 ? `Flytter fra ${acc.name} til ${off.name}` : `Flytter fra ${off.name} til ${acc.name}`;
+        let hint = currentDir === 1 ? `Fra ${acc.name} til ${off.name}` : `Fra ${off.name} til ${acc.name}`;
         document.getElementById('logic-hint').innerText = hint;
     }
 
@@ -197,22 +206,24 @@
         
         let valA, valB;
 
-        // DEN ENDELIGE REGLER FOR INDTÆGTER, UDGIFTER OG PASSIVER
         if (acc.type === 'Indtægt') {
             valA = amt * currentDir;
-            valB = amt * currentDir; // Indtægt + Bank øges
+            valB = amt * currentDir;
         } else if (acc.type === 'Udgift') {
             valA = amt * -1 * currentDir;
-            valB = amt * -1 * currentDir; // Udgift - Bank mindskes
+            valB = amt * -1 * currentDir;
         } else if (acc.type === 'Passiv' && off.type === 'Passiv') {
             valA = amt * -1 * currentDir;
-            valB = amt * currentDir; // Flyt gæld
+            valB = amt * currentDir;
         } else if (acc.type === 'Passiv' && off.type === 'Aktiv') {
             valA = amt * currentDir;
-            valB = amt * currentDir; // Depositum ind (Gæld stiger, Bank stiger)
+            valB = amt * currentDir;
+        } else if (acc.type === 'Aktiv' && off.type === 'Passiv') {
+            valA = amt * -1 * currentDir;
+            valB = amt * -1 * currentDir;
         } else {
             valA = amt * -1 * currentDir;
-            valB = amt * currentDir; // Standard
+            valB = amt * currentDir;
         }
 
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
@@ -221,24 +232,6 @@
         localStorage.setItem('h_jou_v8', JSON.stringify(journal));
         document.getElementById('edit-id').value = "";
         showView('home');
-    }
-
-    function reversePost(gid) {
-        const original = journal.filter(j => j.groupId === gid);
-        const newGid = "rev_" + Date.now();
-        original.forEach(o => {
-            journal.push({...o, groupId: newGid, amount: o.amount * -1, desc: "TILBAGEFØRSEL: " + o.desc, date: new Date().toISOString().split('T')[0]});
-        });
-        localStorage.setItem('h_jou_v8', JSON.stringify(journal));
-        renderJournal();
-    }
-
-    function populateFilters() {
-        const accF = document.getElementById('filter-acc');
-        const yearF = document.getElementById('filter-year');
-        accF.innerHTML = '<option value="all">Alle Konti</option>' + accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-        const years = [...new Set(journal.map(j => j.date.substring(0,4)))].sort((a,b) => b-a);
-        yearF.innerHTML = '<option value="all">Alle År</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     }
 
     function renderJournal() {
@@ -259,14 +252,13 @@
                 </div>
                 <div class="action-btns">
                     <button onclick="document.getElementById('edit-id').value='${j.groupId}'; showView('entry');">Ret</button>
-                    <button onclick="reversePost('${j.groupId}')">Tilbagefør</button>
                     <button style="color:var(--danger)" onclick="deletePost('${j.groupId}')">Slet</button>
                 </div>
             </div>`).join('');
     }
 
     function deletePost(gid) {
-        if(confirm("Slet postering permanent?")) {
+        if(confirm("Slet permanent?")) {
             journal = journal.filter(g => g.groupId !== gid);
             localStorage.setItem('h_jou_v8', JSON.stringify(journal));
             renderJournal();
@@ -323,7 +315,6 @@
             <div class="acc-edit-row">
                 <div style="font-weight:bold; width:30px;">${a.id}</div>
                 <input type="text" value="${a.name}" onchange="updateAccName(${a.id}, this.value)" style="margin:0; flex:1">
-                <div style="font-size:10px; color:gray; width:50px;">${a.type}</div>
                 ${journal.some(j=>j.accId===a.id) ? '' : `<button onclick="delAcc(${a.id})" style="color:red; background:none; border:none;">✕</button>`}
             </div>`).join('');
     }
@@ -358,30 +349,21 @@
     }
 
     function importCSV(event) {
-        const file = event.target.files[0];
         const reader = new FileReader();
         reader.onload = function(e) {
             const lines = e.target.result.split('\n');
-            const newEntries = [];
             for(let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split(';');
                 if(cols.length < 5) continue;
-                const date = cols[0], accId = parseInt(cols[1]), offId = parseInt(cols[2]), desc = cols[3], amt = parseFloat(cols[4]);
-                if(!date || isNaN(accId)) continue;
-                const gid = "imp_" + Date.now() + "_" + i;
-                newEntries.push({ groupId: gid, date, accId, offId, amount: amt, desc, isPrimary: true });
-                newEntries.push({ groupId: gid, date, accId: offId, amount: amt * -1, desc: "Modpost: " + desc, isPrimary: false });
+                journal.push({ groupId: Date.now()+i+"", date: cols[0], accId: parseInt(cols[1]), offId: parseInt(cols[2]), amount: parseFloat(cols[4]), desc: cols[3], isPrimary: true });
             }
-            if(confirm("Importer " + (newEntries.length/2) + " posteringer?")) {
-                journal = journal.concat(newEntries);
-                localStorage.setItem('h_jou_v8', JSON.stringify(journal));
-                showView('home');
-            }
+            localStorage.setItem('h_jou_v8', JSON.stringify(journal));
+            showView('home');
         };
-        reader.readAsText(file);
+        reader.readAsText(event.target.files[0]);
     }
 
-    function clearAll() { if(confirm("Slet alt? Dette kan ikke fortrydes!")) { localStorage.clear(); location.reload(); } }
+    function clearAll() { if(confirm("Slet alt?")) { localStorage.clear(); location.reload(); } }
     showView('home');
 </script>
 </body>
