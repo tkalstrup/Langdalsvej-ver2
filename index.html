@@ -86,17 +86,8 @@
     <button class="back-btn" onclick="showView('home')">Tilbage</button>
 </div>
 
-<div id="view-report-res" class="view">
-    <h2>Resultatopgørelse</h2>
-    <div id="res-content"></div>
-    <button class="back-btn" onclick="showView('home')">Tilbage</button>
-</div>
-
-<div id="view-report-bal" class="view">
-    <h2>Balance</h2>
-    <div id="bal-content"></div>
-    <button class="back-btn" onclick="showView('home')">Tilbage</button>
-</div>
+<div id="view-report-res" class="view"><h2>Resultatopgørelse</h2><div id="res-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
+<div id="view-report-bal" class="view"><h2>Balance</h2><div id="bal-content"></div><button class="back-btn" onclick="showView('home')">Tilbage</button></div>
 
 <div id="view-accounts" class="view">
     <h2>Kontostyring</h2>
@@ -206,23 +197,22 @@
         
         let valA, valB;
 
-        // DEN NYE LOGIK DER FIXER INDTÆGTER OG PASSIVER
+        // DEN ENDELIGE REGLER FOR INDTÆGTER, UDGIFTER OG PASSIVER
         if (acc.type === 'Indtægt') {
-            // Indtægt: Begge stiger (+)
             valA = amt * currentDir;
-            valB = amt * currentDir;
+            valB = amt * currentDir; // Indtægt + Bank øges
+        } else if (acc.type === 'Udgift') {
+            valA = amt * -1 * currentDir;
+            valB = amt * -1 * currentDir; // Udgift - Bank mindskes
         } else if (acc.type === 'Passiv' && off.type === 'Passiv') {
-            // Passiv til Passiv: Fra falder (-), Til stiger (+)
             valA = amt * -1 * currentDir;
-            valB = amt * currentDir;
+            valB = amt * currentDir; // Flyt gæld
         } else if (acc.type === 'Passiv' && off.type === 'Aktiv') {
-            // Modtagelse af depositum (Passiv stiger, Aktiv stiger)
             valA = amt * currentDir;
-            valB = amt * currentDir;
+            valB = amt * currentDir; // Depositum ind (Gæld stiger, Bank stiger)
         } else {
-            // Standard (Udgift/Aktiv-Aktiv): Fra falder (-), Til stiger (+)
             valA = amt * -1 * currentDir;
-            valB = amt * currentDir;
+            valB = amt * currentDir; // Standard
         }
 
         journal.push({ groupId, date: document.getElementById('entry-date').value, accId, offId, amount: valA, desc: document.getElementById('entry-desc').value, isPrimary: true });
